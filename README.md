@@ -30,5 +30,3 @@ MIT License
 ## 预览
 
 ![应用截图](images/app.png)
-
-![应用截图](images/toolbar.png)
