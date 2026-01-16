@@ -1,10 +1,3 @@
-//
-//  MicLockdApp.swift
-//  MicLockd
-//
-//  Created by MisakaTAT on 2026/1/14.
-//
-
 import SwiftUI
 import AppKit
 
@@ -21,18 +14,16 @@ struct MicLockdApp: App {
                 .fixedSize()
                 .onAppear {
                     appDelegate.setAudioManager(audioManager)
-                    // 配置窗口
                     DispatchQueue.main.async {
                         if let window = NSApplication.shared.windows.first {
                             window.styleMask.remove(.resizable)
                             window.setContentSize(NSSize(width: 520, height: 420))
                             window.center()
                             window.isMovableByWindowBackground = true
-                            // 设置窗口关闭时不退出应用
                             window.delegate = appDelegate
                         }
                     }
-                }
+                } 
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)

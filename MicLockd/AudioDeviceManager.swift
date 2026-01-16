@@ -1,10 +1,3 @@
-//
-//  AudioDeviceManager.swift
-//  MicLockd
-//
-//  Created by MisakaTAT on 2026/1/14.
-//
-
 import Foundation
 import Combine
 import CoreAudio
@@ -14,7 +7,7 @@ import UserNotifications
 struct AudioDevice: Identifiable, Hashable {
     let id: AudioDeviceID
     let name: String
-    let uid: String  // 设备的唯一标识符，比 ID 更稳定
+    let uid: String
     
     static func == (lhs: AudioDevice, rhs: AudioDevice) -> Bool {
         return lhs.id == rhs.id
@@ -35,7 +28,6 @@ class AudioDeviceManager: ObservableObject {
     @Published var lockedDeviceUID: String? {
         didSet {
             saveSettings()
-            // 当锁定设备UID变化时，更新锁定的设备名称
             if let uid = lockedDeviceUID, !uid.isEmpty {
                 if let device = availableDevices.first(where: { $0.uid == uid }) {
                     lockedDeviceName = device.name
@@ -54,23 +46,17 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // 保存锁定的设备名称，用于断连时显示
     var lockedDeviceName: String?
-    
-    // 跟踪设备是否断连
     @Published var isDeviceDisconnected: Bool = false
     
-    // 获取锁定设备的UID（用于显示）
     var lockedDeviceUIDDisplay: String {
         return lockedDeviceUID ?? ""
     }
     
-    // 通过UID获取设备ID（用于API调用）
     private func getDeviceIDFromUID(uid: String) -> AudioDeviceID? {
         return availableDevices.first(where: { $0.uid == uid })?.id
     }
     
-    // 获取当前锁定的设备ID（用于API调用）
     private var lockedDeviceID: AudioDeviceID? {
         guard let uid = lockedDeviceUID, !uid.isEmpty else { return nil }
         return getDeviceIDFromUID(uid: uid)
@@ -96,21 +82,16 @@ class AudioDeviceManager: ObservableObject {
     private let lockedDeviceUIDKey = "MicLockd.lockedDeviceUID"
     private let lockedDeviceNameKey = "MicLockd.lockedDeviceName"
     private let selectedDeviceUIDKey = "MicLockd.selectedDeviceUID"
+    private var isLoadingSettings = false
     
     init() {
         loadSettings()
         updateCurrentDevice()
         refreshAvailableDevices()
-        
-        // 请求通知权限
         requestNotificationPermission()
-        
-        // 监听设备列表变化
         setupDevicesPropertyListener()
         
-        // 如果之前是锁定状态，恢复锁定
         if isLocked, let deviceUID = lockedDeviceUID, !deviceUID.isEmpty {
-            // 延迟一点执行，确保设备列表已加载
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.restoreLocking()
             }
@@ -122,7 +103,6 @@ class AudioDeviceManager: ObservableObject {
         stopDevicesMonitoring()
     }
     
-    // 获取当前默认输入设备
     func updateCurrentDevice() {
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -143,7 +123,6 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // 获取设备名称
     func getDeviceName(deviceID: AudioDeviceID) -> String {
         var name: Unmanaged<CFString>?
         var propertyAddress = AudioObjectPropertyAddress(
@@ -168,7 +147,6 @@ class AudioDeviceManager: ObservableObject {
         return "设备 \(deviceID)"
     }
     
-    // 获取设备UID（唯一标识符，比ID更稳定）
     func getDeviceUID(deviceID: AudioDeviceID) -> String {
         var uid: Unmanaged<CFString>?
         var propertyAddress = AudioObjectPropertyAddress(
@@ -193,9 +171,7 @@ class AudioDeviceManager: ObservableObject {
         return ""
     }
     
-    // 检查设备是否有输入通道
     private func deviceHasInputChannels(deviceID: AudioDeviceID) -> Bool {
-        // 检查设备是否有输入流
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
             mScope: kAudioDevicePropertyScopeInput,
@@ -211,12 +187,10 @@ class AudioDeviceManager: ObservableObject {
             &size
         )
         
-        // 如果没有输入流，直接返回false
         guard status == noErr && size > 0 else {
             return false
         }
         
-        // 获取输入流ID列表，验证设备确实有输入功能
         let streamCount = Int(size) / MemoryLayout<AudioStreamID>.size
         guard streamCount > 0 else {
             return false
@@ -235,12 +209,10 @@ class AudioDeviceManager: ObservableObject {
             streamIDs
         )
         
-        // 如果成功获取到输入流ID，说明设备有输入功能
         guard status == noErr else {
             return false
         }
         
-        // 进一步验证：检查输入流的配置是否存在且有效
         propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
             mScope: kAudioDevicePropertyScopeInput,
@@ -256,11 +228,9 @@ class AudioDeviceManager: ObservableObject {
             &size
         )
         
-        // 只有当流配置也存在时，才确认设备有输入功能
         return configStatus == noErr && size > 0
     }
     
-    // 刷新可用设备列表
     func refreshAvailableDevices() {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -278,7 +248,6 @@ class AudioDeviceManager: ObservableObject {
         )
         
         guard status == noErr && size > 0 else {
-            // 检测锁定的设备是否断连（在清空列表前）
             if !availableDevices.isEmpty {
                 checkLockedDeviceDisconnection()
             }
@@ -300,7 +269,6 @@ class AudioDeviceManager: ObservableObject {
         )
         
         guard status == noErr else {
-            // 检测锁定的设备是否断连（在清空列表前）
             if !availableDevices.isEmpty {
                 checkLockedDeviceDisconnection()
             }
@@ -319,14 +287,14 @@ class AudioDeviceManager: ObservableObject {
         }
         
         availableDevices = devices.sorted { $0.name < $1.name }
-        
-        // 检测锁定的设备是否断连（每次刷新都检查）
         checkLockedDeviceDisconnection()
         
-        // 恢复选中的设备，如果不存在则使用当前默认设备或第一个设备
-        if let savedSelectedUID = selectedDeviceUID, !savedSelectedUID.isEmpty,
+        if isLocked, let lockedUID = lockedDeviceUID, !lockedUID.isEmpty {
+            if availableDevices.contains(where: { $0.uid == lockedUID }) {
+                selectedDeviceUID = lockedUID
+            }
+        } else if let savedSelectedUID = selectedDeviceUID, !savedSelectedUID.isEmpty,
            availableDevices.contains(where: { $0.uid == savedSelectedUID }) {
-            // 保存的设备仍然存在，保持选中
         } else if !currentDeviceUID.isEmpty,
                   availableDevices.contains(where: { $0.uid == currentDeviceUID }) {
             selectedDeviceUID = currentDeviceUID
@@ -337,7 +305,6 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // 选择并设置设备（通过UID）
     func selectDevice(uid: String) {
         guard let device = availableDevices.first(where: { $0.uid == uid }) else { return }
         selectedDeviceUID = uid
@@ -349,7 +316,6 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // 设置默认输入设备
     func setDefaultInputDevice(deviceID: AudioDeviceID) -> Bool {
         var deviceIDToSet = deviceID
         let size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -366,7 +332,6 @@ class AudioDeviceManager: ObservableObject {
         return status == noErr
     }
     
-    // 属性监听回调
     private let propertyListenerCallback: AudioObjectPropertyListenerProc = { (
         inObjectID: AudioObjectID,
         inNumberAddresses: UInt32,
@@ -382,7 +347,6 @@ class AudioDeviceManager: ObservableObject {
         DispatchQueue.main.async {
             if manager.isLocked, let lockedUID = manager.lockedDeviceUID, !lockedUID.isEmpty,
                let lockedID = manager.lockedDeviceID {
-                // 检查当前设备是否还是锁定的设备
                 var currentDeviceID: AudioDeviceID = 0
                 var size = UInt32(MemoryLayout<AudioDeviceID>.size)
                 var address = AudioObjectPropertyAddress(
@@ -401,12 +365,10 @@ class AudioDeviceManager: ObservableObject {
                 )
                 
                 if status == noErr && currentDeviceID != lockedID {
-                    // 设备被更改了，恢复锁定的设备
                     let deviceName = manager.lockedDeviceName ?? manager.getDeviceName(deviceID: lockedID)
                     let success = manager.setDefaultInputDevice(deviceID: lockedID)
                     
                     if success {
-                        // 发送守护触发通知
                         manager.sendDeviceRestoredNotification(deviceName: deviceName)
                     }
                 }
@@ -416,11 +378,9 @@ class AudioDeviceManager: ObservableObject {
         return noErr
     }
     
-    // 开始锁定
     func startLocking() {
         guard !isLocked else { return }
         
-        // 如果选择了设备，先设置为默认设备
         if let selectedUID = selectedDeviceUID, !selectedUID.isEmpty,
            let device = availableDevices.first(where: { $0.uid == selectedUID }) {
             _ = setDefaultInputDevice(deviceID: device.id)
@@ -429,12 +389,11 @@ class AudioDeviceManager: ObservableObject {
         updateCurrentDevice()
         guard !currentDeviceUID.isEmpty else { return }
         
-        // 保存设备UID和名称（在设备断开前保存）
         lockedDeviceUID = currentDeviceUID
+        isDeviceDisconnected = false
         if let device = availableDevices.first(where: { $0.uid == currentDeviceUID }) {
             lockedDeviceName = device.name
         } else {
-            // 如果设备不在列表中，通过ID获取名称
             var deviceID: AudioDeviceID = 0
             var size = UInt32(MemoryLayout<AudioDeviceID>.size)
             let status = AudioObjectGetPropertyData(
@@ -451,8 +410,6 @@ class AudioDeviceManager: ObservableObject {
         }
         
         isLocked = true
-        
-        // 注册属性监听
         selfPtr = Unmanaged.passUnretained(self).toOpaque()
         propertyListener = propertyListenerCallback
         
@@ -475,15 +432,21 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // 停止锁定
     func stopLocking() {
         guard isLocked else { return }
         
         isLocked = false
+        isDeviceDisconnected = false
+        lockedDeviceUID = nil
+        lockedDeviceName = nil
         stopMonitoring()
+        
+        if let selectedUID = selectedDeviceUID,
+           !availableDevices.contains(where: { $0.uid == selectedUID }) {
+            selectedDeviceUID = availableDevices.first?.uid
+        }
     }
     
-    // 停止监听
     private func stopMonitoring() {
         if propertyListener != nil, let ptr = selfPtr {
             AudioObjectRemovePropertyListener(
@@ -500,6 +463,8 @@ class AudioDeviceManager: ObservableObject {
     // MARK: - 持久化设置
     
     private func saveSettings() {
+        guard !isLoadingSettings else { return }
+        
         userDefaults.set(isLocked, forKey: isLockedKey)
         
         if let lockedUID = lockedDeviceUID, !lockedUID.isEmpty {
@@ -522,15 +487,17 @@ class AudioDeviceManager: ObservableObject {
     }
     
     private func loadSettings() {
-        isLocked = userDefaults.bool(forKey: isLockedKey)
+        isLoadingSettings = true
+        defer { isLoadingSettings = false }
         
-        // 加载保存的设备UID和名称
-        if let savedUID = userDefaults.string(forKey: lockedDeviceUIDKey), !savedUID.isEmpty {
-            lockedDeviceUID = savedUID
-        }
+        isLocked = userDefaults.bool(forKey: isLockedKey)
         
         if let savedName = userDefaults.string(forKey: lockedDeviceNameKey) {
             lockedDeviceName = savedName
+        }
+        
+        if let savedUID = userDefaults.string(forKey: lockedDeviceUIDKey), !savedUID.isEmpty {
+            lockedDeviceUID = savedUID
         }
         
         if let selectedUID = userDefaults.string(forKey: selectedDeviceUIDKey), !selectedUID.isEmpty {
@@ -544,27 +511,18 @@ class AudioDeviceManager: ObservableObject {
             return
         }
         
-        // 使用 UID 来查找设备
         guard let device = availableDevices.first(where: { $0.uid == lockedUID }) else {
-            // 设备不存在，标记为断连但保持锁定状态
             isDeviceDisconnected = true
             print("保存的设备已不存在，保持锁定状态等待设备重新连接")
-            // 设备列表监听器已经在 setupDevicesPropertyListener 中设置，会自动检测设备重新连接
             return
         }
         
-        // 设备存在，设置为默认设备并恢复锁定
         _ = setDefaultInputDevice(deviceID: device.id)
         updateCurrentDevice()
-        
-        // 更新设备名称（以防变化）
         lockedDeviceName = device.name
         
-        // 重新开始锁定（临时设置 isLocked 为 false 以通过检查）
         let wasLocked = isLocked
         isLocked = false
-        
-        // 注册属性监听
         selfPtr = Unmanaged.passUnretained(self).toOpaque()
         propertyListener = propertyListenerCallback
         
@@ -595,49 +553,31 @@ class AudioDeviceManager: ObservableObject {
     private func checkLockedDeviceDisconnection() {
         guard isLocked, let lockedUID = lockedDeviceUID, !lockedUID.isEmpty else { return }
         
-        // 使用 UID 来识别设备
         let deviceExists = availableDevices.contains { $0.uid == lockedUID }
         
-        // 如果设备不存在，说明设备断连了
         if !deviceExists {
-            // 如果之前设备是连接的，现在断连了，发送通知
             if !isDeviceDisconnected {
                 print("检测到锁定的设备断连: UID=\(lockedUID)")
-                
-                // 使用保存的设备名称
                 let deviceName = lockedDeviceName ?? "未知设备"
                 print("设备名称: \(deviceName)")
-                
-                // 发送通知
                 sendDeviceDisconnectedNotification(deviceName: deviceName)
-                
-                // 标记设备已断连，但保持锁定状态
                 isDeviceDisconnected = true
             }
-            // 不取消锁定状态，等待设备重新连接
         } else {
-            // 设备存在
             guard let device = availableDevices.first(where: { $0.uid == lockedUID }) else { return }
             
-            // 更新设备名称（以防变化）
             lockedDeviceName = device.name
             
-            // 如果之前设备是断连的，现在重新连接了
             if isDeviceDisconnected {
                 print("检测到锁定的设备重新连接: UID=\(lockedUID)")
-                
-                // 使用保存的设备名称
                 let deviceName = lockedDeviceName ?? "未知设备"
-                
-                // 发送重新连接通知
                 sendDeviceReconnectedNotification(deviceName: deviceName)
-                
-                // 自动切换回锁定的设备
                 _ = setDefaultInputDevice(deviceID: device.id)
+                selectedDeviceUID = lockedUID
                 print("已自动切换回锁定的设备: \(deviceName)")
-                
-                // 标记设备已重新连接
                 isDeviceDisconnected = false
+            } else {
+                selectedDeviceUID = lockedUID
             }
         }
     }
@@ -658,7 +598,6 @@ class AudioDeviceManager: ObservableObject {
         
         DispatchQueue.main.async {
             print("设备列表发生变化，刷新设备列表...")
-            // 刷新设备列表
             manager.refreshAvailableDevices()
         }
         
@@ -705,7 +644,6 @@ class AudioDeviceManager: ObservableObject {
     }
     
     private func sendDeviceDisconnectedNotification(deviceName: String) {
-        // 检查通知权限
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized else {
                 print("通知权限未授权，无法发送通知")
@@ -734,7 +672,6 @@ class AudioDeviceManager: ObservableObject {
     }
     
     private func sendDeviceRestoredNotification(deviceName: String) {
-        // 检查通知权限
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized else {
                 print("通知权限未授权，无法发送通知")
@@ -763,7 +700,6 @@ class AudioDeviceManager: ObservableObject {
     }
     
     private func sendDeviceReconnectedNotification(deviceName: String) {
-        // 检查通知权限
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized else {
                 print("通知权限未授权，无法发送通知")

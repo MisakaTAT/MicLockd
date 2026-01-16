@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  MicLockd
-//
-//  Created by MisakaTAT on 2026/1/14.
-//
-
 import SwiftUI
 
 struct ContentView: View {
@@ -65,10 +58,10 @@ private extension ContentView {
     var statusPill: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(audioManager.isLocked ? Color.green : Color.orange)
+                .fill(statusColor)
                 .frame(width: 8, height: 8)
             
-            Text(audioManager.isLocked ? "已锁定" : "未锁定")
+            Text(statusText)
                 .font(.subheadline)
                 .fontWeight(.medium)
         }
@@ -81,12 +74,25 @@ private extension ContentView {
                 .strokeBorder(.separator, lineWidth: 1)
         )
         .accessibilityLabel("锁定状态")
-        .accessibilityValue(audioManager.isLocked ? "已锁定" : "未锁定")
+        .accessibilityValue(statusText)
+    }
+    
+    var statusColor: Color {
+        if audioManager.isLocked {
+            return audioManager.isDeviceDisconnected ? .red : .green
+        }
+        return .orange
+    }
+    
+    var statusText: String {
+        if audioManager.isLocked {
+            return audioManager.isDeviceDisconnected ? "设备断开" : "已锁定"
+        }
+        return "未锁定"
     }
     
     var mainCard: some View {
         VStack(spacing: 20) {
-            // 设备选择区域
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center) {
                     Text("输入设备")
@@ -104,7 +110,25 @@ private extension ContentView {
                     .help("刷新设备列表")
                 }
                 
-                if audioManager.availableDevices.isEmpty {
+                if audioManager.isLocked && audioManager.isDeviceDisconnected {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .font(.system(size: 14))
+                        Text(audioManager.lockedDeviceName ?? "未知设备")
+                            .foregroundStyle(.primary)
+                            .font(.subheadline)
+                        Text("(已断开)")
+                            .foregroundStyle(.red)
+                            .font(.subheadline)
+                    }
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Text("锁定的设备已断开，重新连接后将自动切换回该设备")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if audioManager.availableDevices.isEmpty {
                     Text("未找到可用输入设备")
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
@@ -133,16 +157,14 @@ private extension ContentView {
             
             Divider()
             
-            // 状态信息区域
             VStack(alignment: .leading, spacing: 10) {
                 infoRow(title: "锁定目标", value: lockedTargetText)
                 if audioManager.isLocked && !audioManager.lockedDeviceUIDDisplay.isEmpty {
-                    infoRow(title: "锁定UID", value: audioManager.lockedDeviceUIDDisplay)
+                    infoRow(title: "设备UID", value: audioManager.lockedDeviceUIDDisplay)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             
-            // 操作按钮
             Button(action: {
                 if audioManager.isLocked {
                     audioManager.stopLocking()
