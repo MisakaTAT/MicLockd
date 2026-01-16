@@ -2,6 +2,8 @@
 
 锁定默认音频输入设备，防止意外切换。
 
+`sudo xattr -d com.apple.quarantine /Applications/MicLockd.app`
+
 ## 有什么用？
 
 在使用蓝牙耳机播放音频时，当会议应用（如腾讯会议）启用麦克风功能，macOS 会自动将蓝牙耳机从 A2DP 模式切换到 HFP/HSP 模式，导致音频质量显著下降。
