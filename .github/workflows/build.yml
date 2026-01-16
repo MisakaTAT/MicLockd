@@ -1,0 +1,41 @@
+name: MicLockd
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build MicLockd
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build
+        run: |
+          xcodebuild -project MicLockd.xcodeproj \
+            -scheme MicLockd \
+            -configuration Release \
+            -sdk macosx \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Zip app bundle
+        run: |
+          cd build/DerivedData/Build/Products/Release/
+          zip -y -r MicLockd.zip MicLockd.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicLockd
+          path: build/DerivedData/Build/Products/Release/MicLockd.zip
