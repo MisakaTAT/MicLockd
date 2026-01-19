@@ -460,8 +460,6 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // MARK: - 持久化设置
-    
     private func saveSettings() {
         guard !isLoadingSettings else { return }
         
@@ -548,8 +546,6 @@ class AudioDeviceManager: ObservableObject {
         }
     }
     
-    // MARK: - 设备断连检测
-    
     private func checkLockedDeviceDisconnection() {
         guard isLocked, let lockedUID = lockedDeviceUID, !lockedUID.isEmpty else { return }
         
@@ -581,8 +577,6 @@ class AudioDeviceManager: ObservableObject {
             }
         }
     }
-    
-    // MARK: - 设备列表变化监听
     
     private let devicesPropertyListenerCallback: AudioObjectPropertyListenerProc = { (
         inObjectID: AudioObjectID,
@@ -632,8 +626,6 @@ class AudioDeviceManager: ObservableObject {
             devicesSelfPtr = nil
         }
     }
-    
-    // MARK: - 通知功能
     
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in

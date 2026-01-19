@@ -41,8 +41,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     
-    // MARK: - NSWindowDelegate
-    
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
         
@@ -228,8 +226,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         updateMenuBar()
     }
-    
-    // MARK: - Login Item Management
     
     func setupLoginItem() {
         if !isLoginItemEnabled() {
